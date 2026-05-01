@@ -1,0 +1,8 @@
+---
+CompileFlags:
+  Add:
+    - -I./include 
+    - --target=armv7-unknown-linux-gnueabihf
+    - -march=armv7-a
+    - -mfloat-abi=hard
+    - -mfpu=neon-vfpv4
