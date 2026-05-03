@@ -24,15 +24,13 @@ comms_result_t read_i2c(comms_t *comms, uint8_t address, uint8_t reg,
   struct i2c_msg msgs[2];
   struct i2c_rdwr_ioctl_data msgset;
 
-  // 1. Set the register pointer (Write)
   msgs[0].addr = address;
-  msgs[0].flags = 0; // 0 for Write
+  msgs[0].flags = 0;
   msgs[0].len = 1;
   msgs[0].buf = &reg;
 
-  // 2. Read 'len' bytes (Read)
   msgs[1].addr = address;
-  msgs[1].flags = I2C_M_RD; // Read flag
+  msgs[1].flags = I2C_M_RD;
   msgs[1].len = size;
   msgs[1].buf = data;
 
@@ -51,9 +49,8 @@ comms_result_t write_i2c(comms_t *comms, uint8_t address, uint8_t reg,
   struct i2c_msg msgs[1];
   struct i2c_rdwr_ioctl_data msgset;
 
-  // 1. Set the register pointer (Write)
   msgs[0].addr = address;
-  msgs[0].flags = 0; // 0 for Write
+  msgs[0].flags = 0;
   msgs[0].len = 1;
   msgs[0].buf = &reg;
   msgs[0].buf = data;

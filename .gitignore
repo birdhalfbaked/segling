@@ -1,1 +1,11 @@
 compile_flags.txt
+
+interface/web/node_modules/
+interface/web/dist/
+interface/storage.bin
+interface/state.bin
+interface/commands.bin
+
+controller/tests/run_tests
+controller/tests/run_tests.exe
+controller/tests/*.o

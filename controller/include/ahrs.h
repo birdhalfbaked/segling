@@ -1,7 +1,6 @@
 #ifndef AHRS_H
 #define AHRS_H
 
-#include "errors.h"
 #include <stdint.h>
 
 #define ACCELEROMETER_ADDRESS 0x68
@@ -12,8 +11,38 @@
 #define MAGNETOMETER_START_REGISTER 0x02
 #define MAGNETOMETER_DATA_SIZE 6
 
+/// Magnetometer samples are two's complement, little-endian on the bus;
+/// each axis is in [MAG_MEAS_MIN_DEC, MAG_MEAS_MAX_DEC] (decimal).
+#define MAG_MEAS_MIN_DEC (-4096)
+#define MAG_MEAS_MAX_DEC (4095)
+
+/// Compass calibration: collect raw extrema while turning; then bias +
+/// per-axis rational soft-iron (diagonal only).
+#define AHRS_MAG_CAL_MIN_SAMPLES 150
+#define AHRS_MAG_CAL_MIN_SPAN 64
+#define AHRS_MAG_CAL_MAX_SAMPLES 16000
+
 /// @defgroup AHRS_types AHRS types
 /// @{
+
+typedef enum {
+  AHRS_RESULT_OK = 0,
+  AHRS_RESULT_ERROR_UNKNOWN = -1,
+  AHRS_RESULT_ERROR_INVALID_CONFIG = -2,
+  AHRS_RESULT_ERROR_CALIBRATION_FAILED = -3,
+  AHRS_RESULT_ERROR_UPDATE_FAILED = -4,
+} ahrs_result_t;
+
+/// AHRS state structure
+/// @brief AHRS state structure
+/// @param state State of the AHRS
+typedef enum {
+  AHRS_STATE_INITIALIZING = 0,
+  AHRS_STATE_CALIBRATING = 1,
+  AHRS_STATE_ACTIVE = 2,
+  AHRS_STATE_DISABLED = 3,
+  AHRS_STATE_FAILED = 4,
+} ahrs_state_t;
 
 /// IMU data structure
 /// @brief IMU data structure
@@ -25,13 +54,9 @@ typedef struct {
 } imu_t;
 
 /// IMU value structure
-/// @brief IMU value structure
-/// @param accel_x Accelerometer x value
-/// @param accel_y Accelerometer y value
-/// @param accel_z Accelerometer z value
-/// @param gyro_x Gyroscope x value
-/// @param gyro_y Gyroscope y value
-/// @param gyro_z Gyroscope z value
+/// @brief Raw INT16 register counts (same units as ACCEL_xOUT / GYRO_xOUT).
+/// Scale to SI using ACCEL_FS / gyro full-scale settings from the IMU; this
+/// layer keeps samples in LSB.
 typedef struct {
   int16_t accel_x;
   int16_t accel_y;
@@ -42,10 +67,11 @@ typedef struct {
 } imu_value_t;
 
 /// IMU calibration structure
-/// @brief IMU calibration structure
-/// @param bias Bias in the scaled sensor units
+/// @brief Accelerometer bias in the same LSB units as imu_value_t accel_*.
+/// Corrected accel uses (raw - bias) with int32 intermediates; single-sample
+/// calibration copies smoothed accel while still.
 typedef struct {
-  float bias[3];
+  int32_t bias[3];
 } imu_calibration_t;
 
 /// Magnetometer data structure
@@ -66,13 +92,13 @@ typedef struct {
   int16_t magnet_z;
 } magnetometer_value_t;
 
-/// Magnetometer calibration structure
-/// @brief Magnetometer calibration structure
-/// @param bias[3] Bias in the scaled sensor units
-/// @param mapping[3][3] Mapping matrix
+/// Magnetometer calibration structure (integer sensor units).
+/// @brief Per-axis: corrected = clamp(((raw - bias) * scale_num) / scale_den).
+/// Identity / uncalibrated: scale_den[i] == 0 (treated as scale 1).
 typedef struct {
-  float bias[3];
-  float mapping[3][3];
+  int16_t bias[3];
+  int16_t scale_num[3];
+  int16_t scale_den[3];
 } magnetometer_calibration_t;
 
 /// AHRS public data structure
@@ -85,33 +111,26 @@ typedef struct {
 /// @param rotation_rate_y Rotation rate in rad/s about the y axis
 /// @param rotation_rate_z Rotation rate in rad/s about the z axis
 typedef struct {
-  float heading;
-  float pitch;
-  float roll;
-  float yaw;
-  float rotation_rate_x;
-  float rotation_rate_y;
-  float rotation_rate_z;
+  ahrs_state_t imu_state;
+  ahrs_state_t magnetometer_state;
+  double heading;
+  double pitch;
+  double roll;
+  double yaw;
+  double rotation_rate_x;
+  double rotation_rate_y;
+  double rotation_rate_z;
 } ahrs_public_t;
 
 /// AHRS configuration structure
 /// @brief AHRS configuration structure
-/// @param ema_alpha EMA alpha
+/// @param ema_alpha Smoothing factor in (0, 1); converted to fixed-point
+/// internally so filtering runs on int16 samples without per-sample float
+/// math.
 typedef struct {
   float ema_alpha;
 
 } ahrs_config_t;
-
-/// AHRS state structure
-/// @brief AHRS state structure
-/// @param state State of the AHRS
-typedef enum {
-  AHRS_STATE_INITIALIZING = 0,
-  AHRS_STATE_CALIBRATING = 1,
-  AHRS_STATE_ACTIVE = 2,
-  AHRS_STATE_DISABLED = 3,
-  AHRS_STATE_FAILED = 4,
-} ahrs_state_t;
 
 /// AHRS data structure
 /// @brief AHRS data structure
@@ -134,6 +153,12 @@ typedef struct {
   magnetometer_value_t smoothed_magnetometer_value;
 
   float temperature;
+
+  /// Internal: magnetometer min/max while AHRS_STATE_CALIBRATING (raw samples).
+  int16_t mag_cal_min[3];
+  int16_t mag_cal_max[3];
+  uint16_t mag_cal_sample_count;
+  uint8_t mag_cal_have_bounds;
 } ahrs_t;
 
 /// @defgroup AHRS_methods AHRS methods
