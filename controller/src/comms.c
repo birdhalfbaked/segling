@@ -1,4 +1,4 @@
-#include "comms.h"
+#include "controller/comms.h"
 #include <fcntl.h>
 #include <linux/i2c-dev.h>
 #include <linux/i2c.h>

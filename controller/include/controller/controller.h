@@ -1,11 +1,10 @@
 #ifndef CONTROLLER_H
 #define CONTROLLER_H
 
-#include "ahrs.h"
-#include "commands.h"
-#include "comms.h"
-#include "logging.h"
-#include "storage.h"
+#include "controller/comms.h"
+#include "controller/logging.h"
+#include "controller/scheduling.h"
+#include "controller/storage.h"
 #include <stdint.h>
 
 typedef enum {
@@ -23,11 +22,9 @@ typedef struct {
 extern controller_config_t controller_config;
 
 typedef struct {
-  uint64_t tick;
-  ahrs_t ahrs;
+  epoch_t epoch;
   comms_t comms;
   storage_t storage;
-  command_list_t commands;
 } controller_t;
 
 /// @defgroup CONTROLLER_methods CONTROLLER methods

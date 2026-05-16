@@ -2,18 +2,20 @@
 CC ?= gcc
 CFLAGS := -std=c11 -Wall -Wextra -pedantic
 CPPFLAGS := -I../include
-LDFLAGS := -lm
+LDFLAGS :=
 
-SRC_AHRS := ../src/ahrs.c
-OBJS := ahrs.o test_runner.o test_ahrs_calibration.o test.o
+OBJS := ahrs.o ahrs_calibration.o test_runner.o test_ahrs_calibration.o test.o
 BIN := run_tests
 
 .PHONY: all check clean
 
 all: $(BIN)
 
-ahrs.o: $(SRC_AHRS) ../include/ahrs.h
-	$(CC) $(CFLAGS) $(CPPFLAGS) -c $(SRC_AHRS) -o $@
+ahrs.o: ../src/ahrs.c ../include/integrations/ahrs.h
+	$(CC) $(CFLAGS) $(CPPFLAGS) -c ../src/ahrs.c -o $@
+
+ahrs_calibration.o: ../src/ahrs_calibration.c ../include/integrations/ahrs.h
+	$(CC) $(CFLAGS) $(CPPFLAGS) -c ../src/ahrs_calibration.c -o $@
 
 test_runner.o: test_runner.c test_runner.h
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c test_runner.c -o $@

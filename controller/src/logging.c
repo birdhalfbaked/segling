@@ -1,5 +1,5 @@
-#include "logging.h"
-#include "controller.h"
+#include "controller/logging.h"
+#include "controller/controller.h"
 #include <stdio.h>
 
 #define LOG_EVENTS_PATH "/var/log/segling/events.log"
@@ -40,10 +40,11 @@ void logging_deinit(void) {
   }
 }
 
-void log_message(uint64_t tick, log_level_t level, const char *message) {
+void log_message(uint64_t epoch, slot_id_t slot_id, log_level_t level,
+                 const char *message) {
   if (g_events_log != NULL && level >= controller_config.log_level) {
-    (void)fprintf(g_events_log, "[%llu][%s] - %s\n", tick, level_name(level),
-                  message);
+    (void)fprintf(g_events_log, "[%llu][%d][%s] - %s\n", epoch, slot_id,
+                  level_name(level), message);
     (void)fflush(g_events_log);
   }
 }

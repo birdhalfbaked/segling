@@ -1,5 +1,5 @@
-#ifndef AHRS_H
-#define AHRS_H
+#ifndef INTEGRATIONS_AHRS_H
+#define INTEGRATIONS_AHRS_H
 
 #include <stdint.h>
 
@@ -122,14 +122,8 @@ typedef struct {
   double rotation_rate_z;
 } ahrs_public_t;
 
-/// AHRS configuration structure
-/// @brief AHRS configuration structure
-/// @param ema_alpha Smoothing factor in (0, 1); converted to fixed-point
-/// internally so filtering runs on int16 samples without per-sample float
-/// math.
 typedef struct {
   float ema_alpha;
-
 } ahrs_config_t;
 
 /// AHRS data structure
@@ -142,7 +136,7 @@ typedef struct {
 /// @param smoothed_magnetometer_value Smoothed Magnetometer value (via EMA)
 /// @param temperature Temperature in Celsius
 typedef struct {
-  ahrs_config_t *config;
+  ahrs_config_t config;
 
   ahrs_state_t imu_state;
   imu_calibration_t imu_calibration;
@@ -161,20 +155,28 @@ typedef struct {
   uint8_t mag_cal_have_bounds;
 } ahrs_t;
 
+extern ahrs_t g_ahrs;
+
 /// @defgroup AHRS_methods AHRS methods
 /// @{
 
-ahrs_result_t ahrs_init(ahrs_t *ahrs);
-ahrs_result_t ahrs_calibrate_compass(ahrs_t *ahrs);
-ahrs_result_t ahrs_calibrate_imu(ahrs_t *ahrs);
+ahrs_result_t ahrs_init(void);
 
-ahrs_result_t ahrs_update_imu(ahrs_t *ahrs, imu_value_t *imu_value);
+/// Begin compass calibration (magnetometer_value may be NULL), or collect one
+/// sample while AHRS_STATE_CALIBRATING.
+ahrs_result_t
+ahrs_calibrate_compass(const magnetometer_value_t *magnetometer_value);
+
+/// Begin IMU calibration, or finish bias capture while AHRS_STATE_CALIBRATING
+/// (call after the sample has been smoothed in ahrs_update_imu).
+ahrs_result_t ahrs_calibrate_imu(void);
+
+ahrs_result_t ahrs_update_imu(const imu_value_t *imu_value);
 
 ahrs_result_t
-ahrs_update_magnetometer(ahrs_t *ahrs,
-                         magnetometer_value_t *magnetometer_value);
+ahrs_update_magnetometer(const magnetometer_value_t *magnetometer_value);
 
-ahrs_public_t ahrs_get_data(ahrs_t *ahrs);
+ahrs_public_t ahrs_get_data(void);
 
 /// @}
-#endif
+#endif /* INTEGRATIONS_AHRS_H */

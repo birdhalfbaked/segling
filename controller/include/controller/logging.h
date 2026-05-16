@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+#include "scheduling.h"
+
 /// @defgroup LOGGING_types LOGGING types
 /// @{
 
@@ -36,9 +38,10 @@ logging_result_t logging_init(void);
 /// Close the events log file if open.
 void logging_deinit(void);
 
-/// Write one line: [tick][LEVEL] - message. No-op if logging_init did not open
-/// the file.
-void log_message(uint64_t tick, log_level_t level, const char *message);
+/// Write one line: [epoch][slot_id][LEVEL] - message. No-op if logging_init did
+/// not open the file.
+void log_message(uint64_t epoch, slot_id_t slot_id, log_level_t level,
+                 const char *message);
 
 /// @}
 #endif
