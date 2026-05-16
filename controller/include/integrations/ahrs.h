@@ -1,6 +1,7 @@
 #ifndef INTEGRATIONS_AHRS_H
 #define INTEGRATIONS_AHRS_H
 
+#include "controller/controller.h"
 #include <stdint.h>
 
 #define ACCELEROMETER_ADDRESS 0x68
@@ -177,6 +178,12 @@ ahrs_result_t
 ahrs_update_magnetometer(const magnetometer_value_t *magnetometer_value);
 
 ahrs_public_t ahrs_get_data(void);
+
+/// Step the AHRS
+/// @brief Step the AHRS
+/// @param controller Controller
+/// @param epoch Epoch
+void ahrs_step(controller_t *controller, epoch_t epoch);
 
 /// @}
 #endif /* INTEGRATIONS_AHRS_H */

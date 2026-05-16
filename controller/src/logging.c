@@ -1,5 +1,6 @@
 #include "controller/logging.h"
 #include "controller/controller.h"
+#include <stdarg.h>
 #include <stdio.h>
 
 #define LOG_EVENTS_PATH "/var/log/segling/events.log"
@@ -40,8 +41,22 @@ void logging_deinit(void) {
   }
 }
 
-void log_message(uint64_t epoch, slot_id_t slot_id, log_level_t level,
+void log_message(epoch_t epoch, slot_id_t slot_id, log_level_t level,
                  const char *message) {
+  if (g_events_log != NULL && level >= controller_config.log_level) {
+    (void)fprintf(g_events_log, "[%llu][%d][%s] - %s\n", epoch, slot_id,
+                  level_name(level), message);
+    (void)fflush(g_events_log);
+  }
+}
+
+void log_messagef(epoch_t epoch, slot_id_t slot_id, log_level_t level,
+                  const char *format, ...) {
+  va_list args;
+  va_start(args, format);
+  char message[LOGGING_FORMAT_MAX];
+  vsnprintf(message, sizeof(message), format, args);
+  va_end(args);
   if (g_events_log != NULL && level >= controller_config.log_level) {
     (void)fprintf(g_events_log, "[%llu][%d][%s] - %s\n", epoch, slot_id,
                   level_name(level), message);

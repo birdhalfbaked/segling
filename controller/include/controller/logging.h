@@ -40,8 +40,13 @@ void logging_deinit(void);
 
 /// Write one line: [epoch][slot_id][LEVEL] - message. No-op if logging_init did
 /// not open the file.
-void log_message(uint64_t epoch, slot_id_t slot_id, log_level_t level,
+void log_message(epoch_t epoch, slot_id_t slot_id, log_level_t level,
                  const char *message);
+
+/// Write one line: [epoch][slot_id][LEVEL] - formatted message. No-op if
+/// logging_init did not open the file.
+void log_messagef(epoch_t epoch, slot_id_t slot_id, log_level_t level,
+                  const char *format, ...);
 
 /// @}
 #endif

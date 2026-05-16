@@ -6,6 +6,7 @@
 #include "controller/scheduling.h"
 #include "controller/storage.h"
 #include <stdint.h>
+#include <time.h>
 
 typedef enum {
   CONTROLLER_RESULT_OK = 0,
@@ -23,9 +24,15 @@ extern controller_config_t controller_config;
 
 typedef struct {
   epoch_t epoch;
+  slot_id_t current_slot;
+  struct timespec next_slot_start_time;
   comms_t comms;
   storage_t storage;
 } controller_t;
+
+/// handler for step slot execution
+typedef void (*controller_slot_handler_t)(controller_t *controller,
+                                          epoch_t epoch);
 
 /// @defgroup CONTROLLER_methods CONTROLLER methods
 /// @{

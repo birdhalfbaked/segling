@@ -14,13 +14,19 @@
 typedef uint64_t epoch_t;
 
 typedef enum {
-  FILE_ID_AHRS = 0,
-  FILE_ID_GPS = 1,
-  FILE_ID_BAROMETER = 2,
-  FILE_ID_RUDDER = 3,
-  FILE_ID_AUTOPILOT = 4,
-  FILE_ID_INTERFACE = 5,
+  SLOT_ID_AHRS = 0,
+  SLOT_ID_GPS = 1,
+  SLOT_ID_BAROMETER = 2,
+  SLOT_ID_RUDDER = 3,
+  SLOT_ID_AUTOPILOT = 4,
+  SLOT_ID_INTERFACE = 5,
 } slot_id_t;
+
+typedef enum {
+  SCHEDULING_RESULT_OK = 0,
+  SCHEDULING_RESULT_ERROR_UNKNOWN = -1,
+  SCHEDULING_RESULT_ERROR_INVALID_EPOCH = -2,
+} scheduling_result_t;
 
 /// @}
 
