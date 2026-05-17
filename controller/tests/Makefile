@@ -20,7 +20,7 @@ ahrs_calibration.o: ../src/ahrs_calibration.c ../include/integrations/ahrs.h
 test_runner.o: test_runner.c test_runner.h
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c test_runner.c -o $@
 
-test_ahrs_calibration.o: test_ahrs_calibration.c ../include/ahrs.h test_runner.h
+test_ahrs_calibration.o: test_ahrs_calibration.c ../include/integrations/ahrs.h test_runner.h
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c test_ahrs_calibration.c -o $@
 
 test.o: test.c test_runner.h

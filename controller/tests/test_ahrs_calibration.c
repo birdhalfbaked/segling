@@ -29,7 +29,7 @@ TEST(calibrate_imu_rejects_until_active) {
   ahrs_fixture_reset(0.99f);
   ASSERT(ahrs_init() == AHRS_RESULT_OK);
   ASSERT(g_ahrs.imu_state == AHRS_STATE_INITIALIZING);
-  ASSERT(ahrs_calibrate_imu() == AHRS_RESULT_ERROR_CALIBRATION_FAILED);
+  ASSERT(ahrs_calibrate_imu() == AHRS_CALIBRATION_RESULT_FAILED);
 
   imu_value_t imu = {.accel_x = 100,
                      .accel_y = 200,
@@ -39,7 +39,7 @@ TEST(calibrate_imu_rejects_until_active) {
                      .gyro_z = 0};
   ASSERT(ahrs_update_imu(&imu) == AHRS_RESULT_OK);
   ASSERT(g_ahrs.imu_state == AHRS_STATE_ACTIVE);
-  ASSERT(ahrs_calibrate_imu() == AHRS_RESULT_OK);
+  ASSERT(ahrs_calibrate_imu() == AHRS_CALIBRATION_RESULT_IN_PROGRESS);
   ASSERT(g_ahrs.imu_state == AHRS_STATE_CALIBRATING);
   return 0;
 }
@@ -57,7 +57,7 @@ TEST(imu_calibration_snapshot_matches_smoothed_accel) {
   ASSERT(ahrs_update_imu(&imu) == AHRS_RESULT_OK);
   ASSERT(g_ahrs.imu_state == AHRS_STATE_ACTIVE);
 
-  ASSERT(ahrs_calibrate_imu() == AHRS_RESULT_OK);
+  ASSERT(ahrs_calibrate_imu() == AHRS_CALIBRATION_RESULT_IN_PROGRESS);
   ASSERT(g_ahrs.imu_state == AHRS_STATE_CALIBRATING);
 
   ASSERT(ahrs_update_imu(&imu) == AHRS_RESULT_OK);
@@ -84,12 +84,12 @@ TEST(calibrate_compass_rejects_until_mag_active) {
   ahrs_fixture_reset(0.5f);
   ASSERT(ahrs_init() == AHRS_RESULT_OK);
   ASSERT(g_ahrs.magnetometer_state == AHRS_STATE_INITIALIZING);
-  ASSERT(ahrs_calibrate_compass(NULL) == AHRS_RESULT_ERROR_CALIBRATION_FAILED);
+  ASSERT(ahrs_calibrate_compass(NULL) == AHRS_CALIBRATION_RESULT_FAILED);
 
   magnetometer_value_t mag = {10, 20, 30};
   ASSERT(ahrs_update_magnetometer(&mag) == AHRS_RESULT_OK);
   ASSERT(g_ahrs.magnetometer_state == AHRS_STATE_ACTIVE);
-  ASSERT(ahrs_calibrate_compass(NULL) == AHRS_RESULT_OK);
+  ASSERT(ahrs_calibrate_compass(NULL) == AHRS_CALIBRATION_RESULT_IN_PROGRESS);
   ASSERT(g_ahrs.magnetometer_state == AHRS_STATE_CALIBRATING);
   return 0;
 }
@@ -102,7 +102,7 @@ TEST(magnetometer_calibration_completes_with_axis_excursion) {
   ASSERT(ahrs_update_magnetometer(&mag0) == AHRS_RESULT_OK);
   ASSERT(g_ahrs.magnetometer_state == AHRS_STATE_ACTIVE);
 
-  ASSERT(ahrs_calibrate_compass(NULL) == AHRS_RESULT_OK);
+  ASSERT(ahrs_calibrate_compass(NULL) == AHRS_CALIBRATION_RESULT_IN_PROGRESS);
 
   magnetometer_value_t low = {-400, -400, -400};
   magnetometer_value_t high = {400, 400, 400};
@@ -139,7 +139,7 @@ TEST(magnetometer_calibration_no_finish_if_span_too_small) {
   ASSERT(ahrs_init() == AHRS_RESULT_OK);
   magnetometer_value_t mag0 = {50, 50, 50};
   ASSERT(ahrs_update_magnetometer(&mag0) == AHRS_RESULT_OK);
-  ASSERT(ahrs_calibrate_compass(NULL) == AHRS_RESULT_OK);
+  ASSERT(ahrs_calibrate_compass(NULL) == AHRS_CALIBRATION_RESULT_IN_PROGRESS);
 
   magnetometer_value_t same = {100, 100, 100};
   for (int i = 0; i < 200; i++) {

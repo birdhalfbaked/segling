@@ -22,6 +22,7 @@
 #define AHRS_MAG_CAL_MIN_SAMPLES 150
 #define AHRS_MAG_CAL_MIN_SPAN 64
 #define AHRS_MAG_CAL_MAX_SAMPLES 16000
+#define AHRS_AXIS_COUNT (3U)
 
 /// @defgroup AHRS_types AHRS types
 /// @{
@@ -33,6 +34,12 @@ typedef enum {
   AHRS_RESULT_ERROR_CALIBRATION_FAILED = -3,
   AHRS_RESULT_ERROR_UPDATE_FAILED = -4,
 } ahrs_result_t;
+
+typedef enum {
+  AHRS_CALIBRATION_RESULT_IN_PROGRESS = 0,
+  AHRS_CALIBRATION_RESULT_COMPLETED = 1,
+  AHRS_CALIBRATION_RESULT_FAILED = 2,
+} ahrs_calibration_status_t;
 
 /// AHRS state structure
 /// @brief AHRS state structure
@@ -51,7 +58,7 @@ typedef enum {
 /// @param rotation_rate Rotation rate in rad/s about the x, y, and z axes
 typedef struct {
   float rotation[4];
-  float rotation_rate[3];
+  float rotation_rate[AHRS_AXIS_COUNT];
 } imu_t;
 
 /// IMU value structure
@@ -72,7 +79,7 @@ typedef struct {
 /// Corrected accel uses (raw - bias) with int32 intermediates; single-sample
 /// calibration copies smoothed accel while still.
 typedef struct {
-  int32_t bias[3];
+  int32_t bias[AHRS_AXIS_COUNT];
 } imu_calibration_t;
 
 /// Magnetometer data structure
@@ -97,9 +104,9 @@ typedef struct {
 /// @brief Per-axis: corrected = clamp(((raw - bias) * scale_num) / scale_den).
 /// Identity / uncalibrated: scale_den[i] == 0 (treated as scale 1).
 typedef struct {
-  int16_t bias[3];
-  int16_t scale_num[3];
-  int16_t scale_den[3];
+  int16_t bias[AHRS_AXIS_COUNT];
+  int16_t scale_num[AHRS_AXIS_COUNT];
+  int16_t scale_den[AHRS_AXIS_COUNT];
 } magnetometer_calibration_t;
 
 /// AHRS public data structure
@@ -150,8 +157,8 @@ typedef struct {
   float temperature;
 
   /// Internal: magnetometer min/max while AHRS_STATE_CALIBRATING (raw samples).
-  int16_t mag_cal_min[3];
-  int16_t mag_cal_max[3];
+  int16_t mag_cal_min[AHRS_AXIS_COUNT];
+  int16_t mag_cal_max[AHRS_AXIS_COUNT];
   uint16_t mag_cal_sample_count;
   uint8_t mag_cal_have_bounds;
 } ahrs_t;
@@ -165,12 +172,14 @@ ahrs_result_t ahrs_init(void);
 
 /// Begin compass calibration (magnetometer_value may be NULL), or collect one
 /// sample while AHRS_STATE_CALIBRATING.
-ahrs_result_t
+ahrs_calibration_status_t
 ahrs_calibrate_compass(const magnetometer_value_t *magnetometer_value);
+void ahrs_reset_compass_calibration(void);
 
 /// Begin IMU calibration, or finish bias capture while AHRS_STATE_CALIBRATING
 /// (call after the sample has been smoothed in ahrs_update_imu).
-ahrs_result_t ahrs_calibrate_imu(void);
+ahrs_calibration_status_t ahrs_calibrate_imu(void);
+void ahrs_reset_imu_calibration(void);
 
 ahrs_result_t ahrs_update_imu(const imu_value_t *imu_value);
 

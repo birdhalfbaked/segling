@@ -19,7 +19,8 @@ static int16_t mag_apply_axis_scale(int32_t centered, int16_t num,
   return (int16_t)scaled;
 }
 
-static void ahrs_mag_corrected(const magnetometer_value_t *raw, int16_t out[3]) {
+static void ahrs_mag_corrected(const magnetometer_value_t *raw,
+                               int16_t out[3]) {
   const magnetometer_calibration_t *c = &g_ahrs.magnetometer_calibration;
   const int32_t vx = (int32_t)raw->magnet_x - (int32_t)c->bias[0];
   const int32_t vy = (int32_t)raw->magnet_y - (int32_t)c->bias[1];
@@ -81,13 +82,13 @@ static uint32_t ahrs_alpha_q15(void) {
   return q;
 }
 
-static void ema_blend_int16(int16_t *cur, int16_t raw, uint32_t alpha_q15) {
-  const int64_t c = (int64_t)(*cur);
+static int16_t ema_blend_int16(int16_t cur, int16_t raw, uint32_t alpha_q15) {
+  const int64_t c = (int64_t)cur;
   const int64_t r = (int64_t)raw;
   const int64_t num =
       r * (int64_t)alpha_q15 + c * ((int64_t)AHRS_Q15_ONE - (int64_t)alpha_q15);
   const int32_t blended = (int32_t)(num >> 15);
-  *cur = clamp_i16_from_i32(blended);
+  return clamp_i16_from_i32(blended);
 }
 
 static double ahrs_fabs(double v) {
@@ -133,15 +134,6 @@ static double ahrs_normalize_heading_deg(double deg) {
   return out;
 }
 
-static void ahrs_copy_imu_value(const imu_value_t *src, imu_value_t *dst) {
-  dst->accel_x = src->accel_x;
-  dst->accel_y = src->accel_y;
-  dst->accel_z = src->accel_z;
-  dst->gyro_x = src->gyro_x;
-  dst->gyro_y = src->gyro_y;
-  dst->gyro_z = src->gyro_z;
-}
-
 ahrs_result_t ahrs_init(void) {
   ahrs_result_t result = AHRS_RESULT_OK;
   const float alpha = g_ahrs.config.ema_alpha;
@@ -178,7 +170,12 @@ ahrs_result_t ahrs_update_imu(const imu_value_t *imu_value) {
              (g_ahrs.imu_state == AHRS_STATE_DISABLED)) {
     result = AHRS_RESULT_ERROR_UPDATE_FAILED;
   } else if (g_ahrs.imu_state == AHRS_STATE_INITIALIZING) {
-    ahrs_copy_imu_value(imu_value, &g_ahrs.smoothed_imu_value);
+    g_ahrs.smoothed_imu_value.accel_x = imu_value->accel_x;
+    g_ahrs.smoothed_imu_value.accel_y = imu_value->accel_y;
+    g_ahrs.smoothed_imu_value.accel_z = imu_value->accel_z;
+    g_ahrs.smoothed_imu_value.gyro_x = imu_value->gyro_x;
+    g_ahrs.smoothed_imu_value.gyro_y = imu_value->gyro_y;
+    g_ahrs.smoothed_imu_value.gyro_z = imu_value->gyro_z;
     g_ahrs.imu_state = AHRS_STATE_ACTIVE;
   } else {
     const int32_t cx =
@@ -188,18 +185,26 @@ ahrs_result_t ahrs_update_imu(const imu_value_t *imu_value) {
     const int32_t cz =
         (int32_t)imu_value->accel_z - g_ahrs.imu_calibration.bias[2];
 
-    ema_blend_int16(&g_ahrs.smoothed_imu_value.accel_x, clamp_i16_from_i32(cx),
-                    aq);
-    ema_blend_int16(&g_ahrs.smoothed_imu_value.accel_y, clamp_i16_from_i32(cy),
-                    aq);
-    ema_blend_int16(&g_ahrs.smoothed_imu_value.accel_z, clamp_i16_from_i32(cz),
-                    aq);
-    ema_blend_int16(&g_ahrs.smoothed_imu_value.gyro_x, imu_value->gyro_x, aq);
-    ema_blend_int16(&g_ahrs.smoothed_imu_value.gyro_y, imu_value->gyro_y, aq);
-    ema_blend_int16(&g_ahrs.smoothed_imu_value.gyro_z, imu_value->gyro_z, aq);
+    g_ahrs.smoothed_imu_value.accel_x = ema_blend_int16(
+        g_ahrs.smoothed_imu_value.accel_x, clamp_i16_from_i32(cx), aq);
+    g_ahrs.smoothed_imu_value.accel_y = ema_blend_int16(
+        g_ahrs.smoothed_imu_value.accel_y, clamp_i16_from_i32(cy), aq);
+    g_ahrs.smoothed_imu_value.accel_z = ema_blend_int16(
+        g_ahrs.smoothed_imu_value.accel_z, clamp_i16_from_i32(cz), aq);
+    g_ahrs.smoothed_imu_value.gyro_x = ema_blend_int16(
+        g_ahrs.smoothed_imu_value.gyro_x, imu_value->gyro_x, aq);
+    g_ahrs.smoothed_imu_value.gyro_y = ema_blend_int16(
+        g_ahrs.smoothed_imu_value.gyro_y, imu_value->gyro_y, aq);
+    g_ahrs.smoothed_imu_value.gyro_z = ema_blend_int16(
+        g_ahrs.smoothed_imu_value.gyro_z, imu_value->gyro_z, aq);
 
     if (g_ahrs.imu_state == AHRS_STATE_CALIBRATING) {
-      (void)ahrs_calibrate_imu();
+      ahrs_calibration_status_t status = ahrs_calibrate_imu();
+      if (status == AHRS_CALIBRATION_RESULT_COMPLETED) {
+        g_ahrs.imu_state = AHRS_STATE_ACTIVE;
+      } else if (status == AHRS_CALIBRATION_RESULT_FAILED) {
+        g_ahrs.imu_state = AHRS_STATE_FAILED;
+      }
     }
   }
   return result;
@@ -216,7 +221,13 @@ ahrs_update_magnetometer(const magnetometer_value_t *magnetometer_value) {
              (g_ahrs.magnetometer_state == AHRS_STATE_DISABLED)) {
     result = AHRS_RESULT_ERROR_UPDATE_FAILED;
   } else if (g_ahrs.magnetometer_state == AHRS_STATE_CALIBRATING) {
-    result = ahrs_calibrate_compass(magnetometer_value);
+    const ahrs_calibration_status_t status =
+        ahrs_calibrate_compass(magnetometer_value);
+    if (status == AHRS_CALIBRATION_RESULT_COMPLETED) {
+      g_ahrs.magnetometer_state = AHRS_STATE_ACTIVE;
+    } else if (status == AHRS_CALIBRATION_RESULT_FAILED) {
+      g_ahrs.magnetometer_state = AHRS_STATE_FAILED;
+    }
   } else if (g_ahrs.magnetometer_state == AHRS_STATE_INITIALIZING) {
     int16_t c0[3];
     ahrs_mag_corrected(magnetometer_value, c0);
@@ -227,9 +238,12 @@ ahrs_update_magnetometer(const magnetometer_value_t *magnetometer_value) {
   } else {
     int16_t corr[3];
     ahrs_mag_corrected(magnetometer_value, corr);
-    ema_blend_int16(&g_ahrs.smoothed_magnetometer_value.magnet_x, corr[0], aq);
-    ema_blend_int16(&g_ahrs.smoothed_magnetometer_value.magnet_y, corr[1], aq);
-    ema_blend_int16(&g_ahrs.smoothed_magnetometer_value.magnet_z, corr[2], aq);
+    g_ahrs.smoothed_magnetometer_value.magnet_x = ema_blend_int16(
+        g_ahrs.smoothed_magnetometer_value.magnet_x, corr[0], aq);
+    g_ahrs.smoothed_magnetometer_value.magnet_y = ema_blend_int16(
+        g_ahrs.smoothed_magnetometer_value.magnet_y, corr[1], aq);
+    g_ahrs.smoothed_magnetometer_value.magnet_z = ema_blend_int16(
+        g_ahrs.smoothed_magnetometer_value.magnet_z, corr[2], aq);
   }
   return result;
 }
