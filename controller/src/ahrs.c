@@ -2,6 +2,30 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#define AHRS_PI_4 (0.7853981633974483)
+#define AHRS_PI_3_4 (2.356194490192345)
+#define AHRS_ATAN2_A (0.1963)
+#define AHRS_ATAN2_B (0.9817)
+#define AHRS_PI (3.14159265358979323846)
+#define AHRS_Q15_ONE (32768U)
+#define AHRS_Q15_MAX (32767U)
+
+ahrs_t g_ahrs = {
+    .config =
+        {
+            .ema_alpha = 0.1f,
+        },
+};
+
+_Static_assert(sizeof(ahrs_public_t) == 64U,
+               "ahrs_public_t wire size mismatch — sync Go ahrs_public_v1.go");
+_Static_assert(offsetof(ahrs_public_t, heading) == 8U,
+               "ahrs_public_t heading offset — sync mmap decoder");
+_Static_assert(offsetof(ahrs_public_t, yaw) == 32U,
+               "ahrs_public_t yaw offset — sync mmap decoder");
+_Static_assert(offsetof(ahrs_public_t, rotation_rate_z) == 56U,
+               "ahrs_public_t rotation_rate_z offset — sync mmap decoder");
+
 static int16_t mag_apply_axis_scale(int32_t centered, int16_t num,
                                     int16_t den) {
   int32_t scaled;
@@ -30,26 +54,6 @@ static void ahrs_mag_corrected(const magnetometer_value_t *raw,
   out[1] = mag_apply_axis_scale(vy, c->scale_num[1], c->scale_den[1]);
   out[2] = mag_apply_axis_scale(vz, c->scale_num[2], c->scale_den[2]);
 }
-
-#define AHRS_PI (3.14159265358979323846)
-#define AHRS_Q15_ONE (32768U)
-#define AHRS_Q15_MAX (32767U)
-
-ahrs_t g_ahrs = {
-    .config =
-        {
-            .ema_alpha = 0.1f,
-        },
-};
-
-_Static_assert(sizeof(ahrs_public_t) == 64U,
-               "ahrs_public_t wire size mismatch — sync Go ahrs_public_v1.go");
-_Static_assert(offsetof(ahrs_public_t, heading) == 8U,
-               "ahrs_public_t heading offset — sync mmap decoder");
-_Static_assert(offsetof(ahrs_public_t, yaw) == 32U,
-               "ahrs_public_t yaw offset — sync mmap decoder");
-_Static_assert(offsetof(ahrs_public_t, rotation_rate_z) == 56U,
-               "ahrs_public_t rotation_rate_z offset — sync mmap decoder");
 
 static int16_t clamp_i16_from_i32(int32_t v) {
   int16_t out;
@@ -99,23 +103,24 @@ static double ahrs_fabs(double v) {
   return out;
 }
 
-/* Fast atan2 (radians) without libm; used for heading from smoothed mag XY. */
+/// Fast atan2 (radians) without libm; used for heading from smoothed mag XY.
+/// @brief Fast atan2 (radians) without libm; used for heading from smoothed mag
+/// XY.
+/// @param y Y coordinate
+/// @param x X coordinate
+/// @pre X and Y are not both zero
+/// @return Angle in radians
 static double ahrs_atan2_rad(double y, double x) {
   double abs_y;
   double angle_rad;
   double r;
-
-  if ((x == 0.0) && (y == 0.0)) {
-    return 0.0;
-  }
-
   abs_y = ahrs_fabs(y);
   if (x >= 0.0) {
     r = (x - abs_y) / (x + abs_y);
-    angle_rad = 0.7853981633974483 - (0.1963 * r * r - 0.9817) * r;
+    angle_rad = AHRS_PI_4 + (AHRS_ATAN2_A * r * r - AHRS_ATAN2_B) * r;
   } else {
     r = (x + abs_y) / (abs_y - x);
-    angle_rad = 2.356194490192345 + (0.1963 * r * r - 0.9817) * r;
+    angle_rad = AHRS_PI_3_4 + (AHRS_ATAN2_A * r * r - AHRS_ATAN2_B) * r;
   }
   if (y < 0.0) {
     angle_rad = -angle_rad;
@@ -221,7 +226,7 @@ ahrs_update_magnetometer(const magnetometer_value_t *magnetometer_value) {
              (g_ahrs.magnetometer_state == AHRS_STATE_DISABLED)) {
     result = AHRS_RESULT_ERROR_UPDATE_FAILED;
   } else if (g_ahrs.magnetometer_state == AHRS_STATE_CALIBRATING) {
-    const ahrs_calibration_status_t status =
+    ahrs_calibration_status_t status =
         ahrs_calibrate_compass(magnetometer_value);
     if (status == AHRS_CALIBRATION_RESULT_COMPLETED) {
       g_ahrs.magnetometer_state = AHRS_STATE_ACTIVE;
@@ -262,17 +267,20 @@ ahrs_public_t ahrs_get_data(void) {
   out.rotation_rate_z = 0.0;
 
   {
-    const int16_t mx = g_ahrs.smoothed_magnetometer_value.magnet_x;
-    const int16_t my = g_ahrs.smoothed_magnetometer_value.magnet_y;
+    int16_t mx = g_ahrs.smoothed_magnetometer_value.magnet_x;
+    int16_t my = g_ahrs.smoothed_magnetometer_value.magnet_y;
 
     if ((g_ahrs.magnetometer_state == AHRS_STATE_ACTIVE) &&
         ((mx != 0) || (my != 0))) {
-      const double rad = ahrs_atan2_rad((double)my, (double)mx);
+      double rad = ahrs_atan2_rad((double)my, (double)mx);
       double heading_deg = rad * (180.0 / AHRS_PI);
       heading_deg = ahrs_normalize_heading_deg(heading_deg);
       out.heading = heading_deg;
       out.yaw = heading_deg;
     }
+
+    // calculate pitch and roll
+    // TODO: implement this and fix all the magic numbers
   }
 
   return out;
