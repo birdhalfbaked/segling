@@ -13,8 +13,7 @@
 #define MAGNETOMETER_DATA_SIZE 6
 
 /// Magnetometer samples are two's complement, little-endian on the bus;
-/// each axis is in [MAG_MEAS_MIN_DEC, MAG_MEAS_MAX_DEC] (decimal).
-#define MAG_MEAS_MIN_DEC (-4096)
+/// each axis is in [-4095, 4095] (decimal).
 #define MAG_MEAS_MAX_DEC (4095)
 
 /// Compass calibration: collect raw extrema while turning; then bias +

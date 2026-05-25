@@ -153,7 +153,7 @@ TEST(magnetometer_calibration_no_finish_if_span_too_small) {
 TEST(magnetometer_identity_calibration_preserves_centered_reading) {
   ahrs_fixture_reset(0.5f);
   ASSERT(ahrs_init() == AHRS_RESULT_OK);
-  magnetometer_value_t m = {MAG_MEAS_MAX_DEC / 2, MAG_MEAS_MIN_DEC / 2, 0};
+  magnetometer_value_t m = {MAG_MEAS_MAX_DEC / 2, MAG_MEAS_MAX_DEC / 2, 0};
   ASSERT(ahrs_update_magnetometer(&m) == AHRS_RESULT_OK);
   ASSERT(g_ahrs.smoothed_magnetometer_value.magnet_x == m.magnet_x);
   ASSERT(g_ahrs.smoothed_magnetometer_value.magnet_y == m.magnet_y);

@@ -1,12 +1,8 @@
 #include "integrations/ahrs.h"
+#include "utils/math.h"
 #include <stddef.h>
 #include <stdint.h>
 
-#define AHRS_PI_4 (0.7853981633974483)
-#define AHRS_PI_3_4 (2.356194490192345)
-#define AHRS_ATAN2_A (0.1963)
-#define AHRS_ATAN2_B (0.9817)
-#define AHRS_PI (3.14159265358979323846)
 #define AHRS_Q15_ONE (32768U)
 #define AHRS_Q15_MAX (32767U)
 
@@ -35,11 +31,7 @@ static int16_t mag_apply_axis_scale(int32_t centered, int16_t num,
   } else {
     scaled = (centered * (int32_t)num) / (int32_t)den;
   }
-  if (scaled < (int32_t)MAG_MEAS_MIN_DEC) {
-    scaled = (int32_t)MAG_MEAS_MIN_DEC;
-  } else if (scaled > (int32_t)MAG_MEAS_MAX_DEC) {
-    scaled = (int32_t)MAG_MEAS_MAX_DEC;
-  }
+  scaled = clamp_i32(scaled, -MAG_MEAS_MAX_DEC, MAG_MEAS_MAX_DEC);
   return (int16_t)scaled;
 }
 
@@ -93,39 +85,6 @@ static int16_t ema_blend_int16(int16_t cur, int16_t raw, uint32_t alpha_q15) {
       r * (int64_t)alpha_q15 + c * ((int64_t)AHRS_Q15_ONE - (int64_t)alpha_q15);
   const int32_t blended = (int32_t)(num >> 15);
   return clamp_i16_from_i32(blended);
-}
-
-static double ahrs_fabs(double v) {
-  double out = v;
-  if (out < 0.0) {
-    out = -out;
-  }
-  return out;
-}
-
-/// Fast atan2 (radians) without libm; used for heading from smoothed mag XY.
-/// @brief Fast atan2 (radians) without libm; used for heading from smoothed mag
-/// XY.
-/// @param y Y coordinate
-/// @param x X coordinate
-/// @pre X and Y are not both zero
-/// @return Angle in radians
-static double ahrs_atan2_rad(double y, double x) {
-  double abs_y;
-  double angle_rad;
-  double r;
-  abs_y = ahrs_fabs(y);
-  if (x >= 0.0) {
-    r = (x - abs_y) / (x + abs_y);
-    angle_rad = AHRS_PI_4 + (AHRS_ATAN2_A * r * r - AHRS_ATAN2_B) * r;
-  } else {
-    r = (x + abs_y) / (abs_y - x);
-    angle_rad = AHRS_PI_3_4 + (AHRS_ATAN2_A * r * r - AHRS_ATAN2_B) * r;
-  }
-  if (y < 0.0) {
-    angle_rad = -angle_rad;
-  }
-  return angle_rad;
 }
 
 static double ahrs_normalize_heading_deg(double deg) {
@@ -272,8 +231,8 @@ ahrs_public_t ahrs_get_data(void) {
 
     if ((g_ahrs.magnetometer_state == AHRS_STATE_ACTIVE) &&
         ((mx != 0) || (my != 0))) {
-      double rad = ahrs_atan2_rad((double)my, (double)mx);
-      double heading_deg = rad * (180.0 / AHRS_PI);
+      double rad = atan2_rad((double)my, (double)mx);
+      double heading_deg = rad * (180.0 / MATH_PI);
       heading_deg = ahrs_normalize_heading_deg(heading_deg);
       out.heading = heading_deg;
       out.yaw = heading_deg;

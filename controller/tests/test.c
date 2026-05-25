@@ -6,9 +6,11 @@
 #include <stdio.h>
 
 extern void ahrs_calibration_register_tests(test_registry_t *reg);
+extern void utils_math_register_tests(test_registry_t *reg);
 
 static void register_all_tests(test_registry_t *reg) {
   ahrs_calibration_register_tests(reg);
+  utils_math_register_tests(reg);
 }
 
 int main(void) {
