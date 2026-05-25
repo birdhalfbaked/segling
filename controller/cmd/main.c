@@ -1,5 +1,5 @@
-#include "controller.h"
-#include "logging.h"
+#include "controller/controller.h"
+#include "controller/logging.h"
 #include <string.h>
 
 static void parse_args(int argc, char *argv[]) {

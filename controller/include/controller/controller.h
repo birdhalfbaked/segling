@@ -48,14 +48,8 @@ typedef struct {
   slot_id_t current_slot;
   /// @brief The next slot start time in absolute time
   struct timespec next_slot_start_time;
-  /// @brief The comms structure for communication with the external devices
-  /// @pre comms must be a valid pointer to a comms_t structure which is
-  /// initialized
-  comms_t *comms;
-  /// @brief The storage structure for persistent storage
-  /// @pre storage must be a valid pointer to a storage_t structure which is
-  /// initialized
-  storage_t *storage;
+  comms_t comms;
+  storage_t storage;
 } controller_t;
 extern controller_config_t controller_config;
 

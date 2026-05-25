@@ -23,7 +23,7 @@ Control is layered: a small **core** owns the schedule and shared services; **in
            │                           │                           │
     ┌──────▼──────┐            ┌───────▼───────┐           ┌───────▼───────┐
     │ COMMS       │            │ STORAGE       │           │ LOGGING       │
-    │ I2C / serial│            │ mmap state    │           │ epoch/slot    │
+    │ I2C or sim  │            │ mmap state    │           │ epoch/slot    │
     └─────────────┘            │ (Go-facing)   │           │ tagged lines  │
                                └───────────────┘           └───────────────┘
                                        │
@@ -204,13 +204,73 @@ These are the rules the core expects; violating them shows up as missed slots, s
 - Handlers must be **reentrant only across epochs**, not across slots in the same epoch unless you provide your own locking; the core does not serialize integration-side shared globals.
 - Return values are **void**; report integration failures via result enums internally, storage flags, or logs — the core does not yet aggregate per-slot errors into `CONTROLLER_RESULT_ERROR_STEP_FAILED` automatically.
 
+## Comms backends
+
+`comms.h` defines `COMMS_BACKEND_HARDWARE` / `COMMS_BACKEND_SIM` as numeric tokens. The Makefile accepts `COMMS_BACKEND=HARDWARE` or `SIM` and passes `-DCOMMS_BACKEND=COMMS_BACKEND_*`. All of `src/*.c` is built; `comms_hardware.c` and `comms_sim.c` wrap their bodies in `#if COMMS_BACKEND == …` so the inactive file preprocesses to an empty translation unit.
+
+| `COMMS_BACKEND` | Linked module | Use |
+|-----------------|---------------|-----|
+| `SIM` (Makefile default) | `comms_sim.c` | Per-device files under `simulated_data/` |
+| `HARDWARE` | `comms_hardware.c` | Linux I2C (`I2C_DEVICE`, e.g. `/dev/i2c-1`) |
+
+## Build
+
+One `Makefile` at the repo root of `controller/` (shared flags for app and tests). Artifacts go under `build/`.
+
+```bash
+make generate-sim-data                          # simulated_data/imu.dat, mag.dat
+make generate-sim-data SIM_SEED=99              # different fixture, same layout
+
+make                                          # build/segling-controller
+make test                                     # build/run_tests
+make check                                    # run unit tests
+make clean
+
+make COMMS_BACKEND=SIM COMMS_SIM_DATA_DIR=simulated_data
+make COMMS_BACKEND=HARDWARE I2C_DEVICE=/dev/i2c-1
+make check COMMS_BACKEND=SIM
+```
+
+`tests/Makefile` only forwards to the parent (`make -C .. check`).
+
+The C preprocessor cannot compare string literals in `#if`, so the Makefile maps the user-facing `HARDWARE`/`SIM` names to the numeric tokens in `comms.h`.
+
+### SIM: address → file map
+
+On first I2C access to an address, `comms_sim.c` loads the matching file from `COMMS_SIM_DATA_DIR`:
+
+| I2C address | File | Integration |
+|-------------|------|-------------|
+| `0x68` | `imu.dat` | AHRS accel/gyro burst @ `0x3B` |
+| `0x0C` | `mag.dat` | AHRS magnetometer @ `0x02` |
+
+Add a `case` in `comms_sim.c` and a generator function in `scripts/generate_sim_data.py` for each new sensor.
+
+Per-file line format (`reg` then data bytes; address comes from the switch):
+
+```text
+# comments allowed
+3B 00 10 20 00 30 40 00 50 60 00 00 00 00
+```
+
+Regenerate all device files with one seeded script:
+
+```bash
+make generate-sim-data SIM_SEED=42
+# or: uv run python scripts/generate_sim_data.py --seed 42 --out-dir simulated_data
+```
+
+Writes are flushed back to the same per-device file on `comms_deinit`.
+
 ## Layout
 
 | Path | Purpose |
 |------|---------|
 | `include/controller/` | Core: controller, comms, storage, scheduling, logging |
+| `data/comms_sim.txt` | Example sim register file |
 | `include/integrations/` | Per-device modules (AHRS, GPS, …) |
 | `src/` | Implementations |
 | `cmd/main.c` | Process entry: init → step loop |
-| `tests/` | Unit tests |
+| `tests/` | Unit test sources (`make check` from controller root) |
+| `build/` | Compiled objects and binaries (gitignored) |
 | `Doxygen.conf` | API documentation config |

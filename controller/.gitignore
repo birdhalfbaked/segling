@@ -1,0 +1,10 @@
+build/
+*.o
+*.obj
+*.a
+segling-controller
+segling-controller.exe
+
+# Directory is tracked; device *.dat files are generated locally.
+simulated_data/*
+!simulated_data/.gitkeep

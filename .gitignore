@@ -8,7 +8,12 @@ interface/commands.bin
 
 controller/tests/run_tests
 controller/tests/run_tests.exe
-controller/tests/*.o
+controller/**/*.o
+controller/**/*.obj
+controller/**/*.a
+controller/build/
+controller/segling-controller
+controller/segling-controller.exe
 
 controller/docs/*
 !controller/docs/.gitkeep

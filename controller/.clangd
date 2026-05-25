@@ -6,3 +6,5 @@ CompileFlags:
     - -march=armv7-a
     - -mfloat-abi=hard
     - -mfpu=neon-vfpv4
+    - -DCOMMS_BACKEND=COMMS_BACKEND_SIM
+    - -DCOMMS_SIM_DATA_DIR="simulated_data"
