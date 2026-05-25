@@ -1,3 +1,6 @@
+/// @defgroup INTERFACE Interface module
+/// @ingroup INTEGRATIONS
+/// @{
 #ifndef INTEGRATIONS_INTERFACE_H
 #define INTEGRATIONS_INTERFACE_H
 
@@ -7,3 +10,4 @@
 void interface_step(controller_t *controller, epoch_t epoch);
 
 #endif
+/// @}

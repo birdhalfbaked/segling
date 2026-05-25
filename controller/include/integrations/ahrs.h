@@ -1,3 +1,6 @@
+/// @defgroup AHRS AHRS module
+/// @ingroup INTEGRATIONS
+/// @{
 #ifndef INTEGRATIONS_AHRS_H
 #define INTEGRATIONS_AHRS_H
 
@@ -194,4 +197,5 @@ ahrs_public_t ahrs_get_data(void);
 void ahrs_step(controller_t *controller, epoch_t epoch);
 
 /// @}
-#endif /* INTEGRATIONS_AHRS_H */
+#endif
+/// @}
