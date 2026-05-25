@@ -9,3 +9,6 @@ interface/commands.bin
 controller/tests/run_tests
 controller/tests/run_tests.exe
 controller/tests/*.o
+
+controller/docs/*
+!controller/docs/.gitkeep

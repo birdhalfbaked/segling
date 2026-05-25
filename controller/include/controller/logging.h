@@ -1,3 +1,6 @@
+/// @defgroup LOGGING Logging module
+/// @ingroup CORE
+/// @{
 #ifndef LOGGING_H
 #define LOGGING_H
 
@@ -50,3 +53,4 @@ void log_messagef(epoch_t epoch, slot_id_t slot_id, log_level_t level,
 
 /// @}
 #endif
+/// @}

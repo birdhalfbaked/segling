@@ -1,3 +1,6 @@
+/// @defgroup SCHEDULING Scheduling module
+/// @ingroup CORE
+/// @{
 #ifndef SCHEDULING_H
 #define SCHEDULING_H
 
@@ -27,7 +30,6 @@ typedef enum {
   SCHEDULING_RESULT_ERROR_UNKNOWN = -1,
   SCHEDULING_RESULT_ERROR_INVALID_EPOCH = -2,
 } scheduling_result_t;
-
 /// @}
-
 #endif
+/// @}

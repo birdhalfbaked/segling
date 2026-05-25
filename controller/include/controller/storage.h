@@ -1,3 +1,6 @@
+/// @defgroup STORAGE Storage module
+/// @ingroup CORE
+/// @{
 #ifndef STORAGE_H
 #define STORAGE_H
 
@@ -54,6 +57,13 @@ storage_result_t storage_read(storage_t *storage, slot_id_t slot_id,
 /// @}
 
 /// Commit slot and switch commit pointer for the file with the given slot_id
+/// @brief Commit slot and switch commit pointer for the file with the given
+/// slot_id
+/// @param storage Storage
+/// @param slot_id Slot ID
+/// @return STORAGE_RESULT_OK if the slot was committed,
+/// STORAGE_RESULT_ERROR_UNKNOWN if an error occurred
 storage_result_t storage_commit(storage_t *storage, slot_id_t slot_id);
 /// @}
 #endif
+/// @}
