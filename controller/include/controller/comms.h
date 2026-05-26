@@ -24,12 +24,9 @@
 #define I2C_DEVICE "/dev/i2c-1"
 #endif
 
-#ifndef COMMS_SIM_DATA_DIR
-#define COMMS_SIM_DATA_DIR "simulated_data"
+#ifndef COMMS_BUFFER_SIZE
+#define COMMS_BUFFER_SIZE (128U)
 #endif
-
-#define COMMS_SIM_MAX_RECORDS (128U)
-#define COMMS_SIM_MAX_DATA_LEN (32U)
 
 typedef enum {
   COMMS_RESULT_OK = 0,
@@ -39,20 +36,8 @@ typedef enum {
 } comms_result_t;
 
 typedef struct {
-  uint8_t address;
-  uint8_t reg;
-  uint8_t len;
-  uint8_t data[COMMS_SIM_MAX_DATA_LEN];
-} comms_sim_record_t;
-
-typedef struct {
   bool _initialized;
   int _i2c_fd;
-  char _sim_data_dir[256];
-  bool _sim_addr_loaded[256];
-  bool _sim_dirty_addrs[256];
-  size_t _sim_record_count;
-  comms_sim_record_t _sim_records[COMMS_SIM_MAX_RECORDS];
 } comms_t;
 
 comms_result_t comms_init(comms_t *comms);

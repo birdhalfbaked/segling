@@ -6,24 +6,58 @@
 #if COMMS_BACKEND == COMMS_BACKEND_SIM
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
+
+#ifndef COMMS_SIM_DATA_DIR
+#define COMMS_SIM_DATA_DIR "simulated_data"
+#endif
+
+#define COMMS_SIM_MAX_FRAME_COUNT (255U)
 
 /* Match integrations/ahrs.h bus map; extend switch when adding sensors. */
 #define COMMS_SIM_IMU_ADDRESS (0x68U)
-#define COMMS_SIM_MAG_ADDRESS (0x0CU)
+#define COMMS_SIM_IMU_START_REG (0x3BU)
+#define COMMS_SIM_IMU_FRAME_LEN (14U)
 
-static bool sim_device_filename(uint8_t address, const char **filename_out) {
+#define COMMS_SIM_MAG_ADDRESS (0x0CU)
+#define COMMS_SIM_MAG_START_REG (0x02U)
+#define COMMS_SIM_MAG_FRAME_LEN (6U)
+
+typedef struct {
+  const char *filename;
+  uint8_t start_reg;
+  uint8_t frame_len;
+} sim_device_desc_t;
+
+typedef struct {
+  bool loaded;
+  bool disconnected;
+  uint8_t start_reg;
+  uint8_t frame_len;
+  uint8_t frame_count;
+  uint8_t line_index;
+  FILE *file;
+} sim_device_t;
+
+static char g_sim_data_dir[256];
+static sim_device_t g_sim_devices[256];
+
+static bool sim_device_desc(uint8_t address, sim_device_desc_t *desc_out) {
   bool found = true;
-  if (filename_out == NULL) {
+
+  if (desc_out == NULL) {
     found = false;
   } else {
     switch (address) {
     case COMMS_SIM_IMU_ADDRESS:
-      *filename_out = "imu.dat";
+      desc_out->filename = "imu.dat";
+      desc_out->start_reg = COMMS_SIM_IMU_START_REG;
+      desc_out->frame_len = COMMS_SIM_IMU_FRAME_LEN;
       break;
     case COMMS_SIM_MAG_ADDRESS:
-      *filename_out = "mag.dat";
+      desc_out->filename = "mag.dat";
+      desc_out->start_reg = COMMS_SIM_MAG_START_REG;
+      desc_out->frame_len = COMMS_SIM_MAG_FRAME_LEN;
       break;
     default:
       found = false;
@@ -33,152 +67,96 @@ static bool sim_device_filename(uint8_t address, const char **filename_out) {
   return found;
 }
 
-static comms_sim_record_t *sim_find_record(comms_t *comms, uint8_t address,
-                                           uint8_t reg) {
-  size_t index;
-  comms_sim_record_t *result = NULL;
-
-  for (index = 0U; index < comms->_sim_record_count; index++) {
-    if ((comms->_sim_records[index].address == address) &&
-        (comms->_sim_records[index].reg == reg)) {
-      result = &comms->_sim_records[index];
-      break;
-    }
+static comms_result_t sim_close_device(sim_device_t *device) {
+  if ((device != NULL) && (device->file != NULL)) {
+    (void)fclose(device->file);
+    device->file = NULL;
   }
-  return result;
+  if (device != NULL) {
+    device->loaded = false;
+  }
+  return COMMS_RESULT_OK;
 }
 
-static comms_result_t sim_parse_device_line(comms_t *comms, uint8_t address,
-                                            const char *line) {
+static comms_result_t sim_load_device(uint8_t address) {
   comms_result_t result = COMMS_RESULT_OK;
-  unsigned int reg = 0U;
-  unsigned int byte_val = 0U;
-  int consumed = 0;
-  int header_matched = 0;
-  const char *cursor = NULL;
-  comms_sim_record_t *record = NULL;
-
-  if ((comms == NULL) || (line == NULL)) {
-    result = COMMS_RESULT_ERROR_UNKNOWN;
-  } else if ((line[0] == '#') || (line[0] == '\0') || (line[0] == '\n')) {
-    result = COMMS_RESULT_OK;
-  } else if (comms->_sim_record_count >= COMMS_SIM_MAX_RECORDS) {
-    result = COMMS_RESULT_ERROR_UNKNOWN;
-  } else {
-    header_matched = sscanf(line, " %x%n", &reg, &consumed);
-    if (header_matched < 1) {
-      result = COMMS_RESULT_ERROR_UNKNOWN;
-    } else {
-      record = &comms->_sim_records[comms->_sim_record_count];
-      record->address = address;
-      record->reg = (uint8_t)reg;
-      record->len = 0U;
-      cursor = line + consumed;
-
-      while (record->len < COMMS_SIM_MAX_DATA_LEN) {
-        consumed = 0;
-        if (sscanf(cursor, " %x%n", &byte_val, &consumed) != 1) {
-          break;
-        }
-        record->data[record->len] = (uint8_t)byte_val;
-        record->len++;
-        cursor += consumed;
-      }
-      if (record->len == 0U) {
-        result = COMMS_RESULT_ERROR_UNKNOWN;
-      } else {
-        comms->_sim_record_count++;
-      }
-    }
-  }
-  return result;
-}
-
-static comms_result_t sim_load_device_file(comms_t *comms, uint8_t address,
-                                           const char *filename) {
-  comms_result_t result = COMMS_RESULT_OK;
-  FILE *file = NULL;
-  char line[256];
+  sim_device_desc_t desc;
+  sim_device_t *device = &g_sim_devices[address];
   char path[512];
+  long file_size = 0L;
+  long frame_count_long = 0L;
 
-  if ((comms == NULL) || (filename == NULL)) {
-    result = COMMS_RESULT_ERROR_UNKNOWN;
-  } else if (snprintf(path, sizeof(path), "%s/%s", comms->_sim_data_dir,
-                      filename) >= (int)sizeof(path)) {
+  if (!sim_device_desc(address, &desc)) {
+    result = COMMS_RESULT_ERROR_READ_FAILED;
+  } else if (device->loaded) {
+    result = COMMS_RESULT_OK;
+  } else if (snprintf(path, sizeof(path), "%s/%s", g_sim_data_dir,
+                      desc.filename) >= (int)sizeof(path)) {
     result = COMMS_RESULT_ERROR_UNKNOWN;
   } else {
-    file = fopen(path, "r");
-    if (file == NULL) {
+    (void)memset(device, 0, sizeof(*device));
+    device->file = fopen(path, "rb+");
+    if (device->file == NULL) {
       result = COMMS_RESULT_ERROR_READ_FAILED;
     } else {
-      while (fgets(line, (int)sizeof(line), file) != NULL) {
-        comms_result_t parse_result =
-            sim_parse_device_line(comms, address, line);
-        if (parse_result != COMMS_RESULT_OK) {
-          result = parse_result;
-          break;
+      device->start_reg = desc.start_reg;
+      device->frame_len = desc.frame_len;
+      if (fseek(device->file, 0L, SEEK_END) != 0) {
+        result = COMMS_RESULT_ERROR_UNKNOWN;
+      } else {
+        file_size = ftell(device->file);
+        if ((file_size < 0L) || ((file_size % (long)desc.frame_len) != 0L)) {
+          result = COMMS_RESULT_ERROR_UNKNOWN;
+        } else {
+          frame_count_long = file_size / (long)desc.frame_len;
+          if ((frame_count_long == 0L) ||
+              (frame_count_long > (long)COMMS_SIM_MAX_FRAME_COUNT)) {
+            result = COMMS_RESULT_ERROR_READ_FAILED;
+          } else {
+            device->frame_count = (uint8_t)frame_count_long;
+            device->line_index = 0U;
+            device->disconnected = false;
+            device->loaded = true;
+          }
         }
       }
-      (void)fclose(file);
+      if (result != COMMS_RESULT_OK) {
+        (void)sim_close_device(device);
+      }
     }
   }
   return result;
 }
 
-static comms_result_t sim_ensure_device_loaded(comms_t *comms, uint8_t address) {
+static comms_result_t sim_seek_frame_reg(const sim_device_t *device, uint8_t reg) {
   comms_result_t result = COMMS_RESULT_OK;
-  const char *filename = NULL;
+  long offset = 0L;
 
-  if ((comms == NULL) || !comms->_initialized) {
+  if ((device == NULL) || (device->file == NULL)) {
     result = COMMS_RESULT_ERROR_READ_FAILED;
-  } else if (comms->_sim_addr_loaded[address]) {
-    result = COMMS_RESULT_OK;
-  } else if (!sim_device_filename(address, &filename)) {
+  } else if (reg < device->start_reg) {
     result = COMMS_RESULT_ERROR_READ_FAILED;
   } else {
-    result = sim_load_device_file(comms, address, filename);
+    offset =
+        ((long)device->line_index * (long)device->frame_len) +
+        (long)(reg - device->start_reg);
+    if (fseek(device->file, offset, SEEK_SET) != 0) {
+      result = COMMS_RESULT_ERROR_READ_FAILED;
+    }
+  }
+  return result;
+}
+
+static comms_result_t sim_ensure_device(uint8_t address, sim_device_t **device_out) {
+  comms_result_t result = COMMS_RESULT_OK;
+  sim_device_t *device = &g_sim_devices[address];
+
+  if (device_out == NULL) {
+    result = COMMS_RESULT_ERROR_UNKNOWN;
+  } else {
+    result = sim_load_device(address);
     if (result == COMMS_RESULT_OK) {
-      comms->_sim_addr_loaded[address] = true;
-    }
-  }
-  return result;
-}
-
-static comms_result_t sim_flush_device(comms_t *comms, uint8_t address) {
-  comms_result_t result = COMMS_RESULT_OK;
-  const char *filename = NULL;
-  FILE *file = NULL;
-  char path[512];
-  size_t index;
-
-  if ((comms == NULL) || !comms->_sim_dirty_addrs[address]) {
-    result = COMMS_RESULT_OK;
-  } else if (!sim_device_filename(address, &filename)) {
-    result = COMMS_RESULT_ERROR_WRITE_FAILED;
-  } else if (snprintf(path, sizeof(path), "%s/%s", comms->_sim_data_dir,
-                      filename) >= (int)sizeof(path)) {
-    result = COMMS_RESULT_ERROR_WRITE_FAILED;
-  } else {
-    file = fopen(path, "w");
-    if (file == NULL) {
-      result = COMMS_RESULT_ERROR_WRITE_FAILED;
-    } else {
-      (void)fprintf(file, "# addr %02x reg data_bytes...\n", (unsigned int)address);
-      for (index = 0U; index < comms->_sim_record_count; index++) {
-        const comms_sim_record_t *record = &comms->_sim_records[index];
-        size_t byte_index;
-        if (record->address != address) {
-          continue;
-        }
-        (void)fprintf(file, "%02x", (unsigned int)record->reg);
-        for (byte_index = 0U; byte_index < (size_t)record->len; byte_index++) {
-          (void)fprintf(file, " %02x",
-                        (unsigned int)record->data[byte_index]);
-        }
-        (void)fprintf(file, "\n");
-      }
-      (void)fclose(file);
-      comms->_sim_dirty_addrs[address] = false;
+      *device_out = device;
     }
   }
   return result;
@@ -191,10 +169,10 @@ comms_result_t comms_init(comms_t *comms) {
     result = COMMS_RESULT_ERROR_UNKNOWN;
   } else {
     (void)memset(comms, 0, sizeof(*comms));
+    (void)memset(g_sim_devices, 0, sizeof(g_sim_devices));
     comms->_i2c_fd = -1;
-    (void)strncpy(comms->_sim_data_dir, COMMS_SIM_DATA_DIR,
-                  sizeof(comms->_sim_data_dir) - 1U);
-    comms->_sim_data_dir[sizeof(comms->_sim_data_dir) - 1U] = '\0';
+    (void)strncpy(g_sim_data_dir, COMMS_SIM_DATA_DIR, sizeof(g_sim_data_dir) - 1U);
+    g_sim_data_dir[sizeof(g_sim_data_dir) - 1U] = '\0';
     comms->_initialized = true;
   }
   return result;
@@ -206,12 +184,12 @@ comms_result_t comms_deinit(comms_t *comms) {
 
   if ((comms != NULL) && comms->_initialized) {
     for (address = 0U; address < 256U; address++) {
-      comms_result_t flush_result = sim_flush_device(comms, (uint8_t)address);
-      if (flush_result != COMMS_RESULT_OK) {
-        result = flush_result;
+      if (g_sim_devices[address].loaded) {
+        (void)sim_close_device(&g_sim_devices[address]);
       }
     }
     comms->_initialized = false;
+    comms->_i2c_fd = -1;
   }
   return result;
 }
@@ -219,22 +197,38 @@ comms_result_t comms_deinit(comms_t *comms) {
 comms_result_t comms_read_i2c(comms_t *comms, uint8_t address, uint8_t reg,
                               uint8_t *data, size_t size) {
   comms_result_t result = COMMS_RESULT_OK;
-  const comms_sim_record_t *record = NULL;
-  size_t copy_len;
+  sim_device_t *device = NULL;
+  size_t offset = 0U;
 
   if ((comms == NULL) || (data == NULL) || (size == 0U) || !comms->_initialized) {
     result = COMMS_RESULT_ERROR_READ_FAILED;
   } else {
-    result = sim_ensure_device_loaded(comms, address);
+    result = sim_ensure_device(address, &device);
     if (result == COMMS_RESULT_OK) {
-      record = sim_find_record(comms, address, reg);
-      if (record == NULL) {
+      if ((device == NULL) || device->disconnected) {
+        result = COMMS_RESULT_ERROR_READ_FAILED;
+      } else if (device->line_index >= device->frame_count) {
+        device->disconnected = true;
+        result = COMMS_RESULT_ERROR_READ_FAILED;
+      } else if (reg < device->start_reg) {
         result = COMMS_RESULT_ERROR_READ_FAILED;
       } else {
-        copy_len = (size < (size_t)record->len) ? size : (size_t)record->len;
-        (void)memcpy(data, record->data, copy_len);
-        if (copy_len < size) {
-          (void)memset(data + copy_len, 0, size - copy_len);
+        offset = (size_t)(reg - device->start_reg);
+        if (((offset + size) > (size_t)device->frame_len) ||
+            (size > COMMS_BUFFER_SIZE)) {
+          result = COMMS_RESULT_ERROR_READ_FAILED;
+        } else {
+          result = sim_seek_frame_reg(device, reg);
+          if (result == COMMS_RESULT_OK) {
+            if (fread(data, 1U, size, device->file) != size) {
+              result = COMMS_RESULT_ERROR_READ_FAILED;
+            } else {
+              device->line_index++;
+              if (device->line_index >= device->frame_count) {
+                device->disconnected = true;
+              }
+            }
+          }
         }
       }
     }
@@ -245,29 +239,34 @@ comms_result_t comms_read_i2c(comms_t *comms, uint8_t address, uint8_t reg,
 comms_result_t comms_write_i2c(comms_t *comms, uint8_t address, uint8_t reg,
                                const uint8_t *data, size_t size) {
   comms_result_t result = COMMS_RESULT_OK;
-  comms_sim_record_t *record = NULL;
+  sim_device_t *device = NULL;
+  size_t offset = 0U;
 
-  if ((comms == NULL) || (data == NULL) || (size == 0U) ||
-      (size > COMMS_SIM_MAX_DATA_LEN) || !comms->_initialized) {
+  if ((comms == NULL) || (data == NULL) || (size == 0U) || !comms->_initialized) {
     result = COMMS_RESULT_ERROR_WRITE_FAILED;
   } else {
-    result = sim_ensure_device_loaded(comms, address);
+    result = sim_ensure_device(address, &device);
     if (result == COMMS_RESULT_OK) {
-      record = sim_find_record(comms, address, reg);
-      if (record == NULL) {
-        if (comms->_sim_record_count >= COMMS_SIM_MAX_RECORDS) {
+      if ((device == NULL) || device->disconnected) {
+        result = COMMS_RESULT_ERROR_WRITE_FAILED;
+      } else if (device->line_index >= device->frame_count) {
+        device->disconnected = true;
+        result = COMMS_RESULT_ERROR_WRITE_FAILED;
+      } else if (reg < device->start_reg) {
+        result = COMMS_RESULT_ERROR_WRITE_FAILED;
+      } else {
+        offset = (size_t)(reg - device->start_reg);
+        if (((offset + size) > (size_t)device->frame_len) ||
+            (size > COMMS_BUFFER_SIZE)) {
           result = COMMS_RESULT_ERROR_WRITE_FAILED;
         } else {
-          record = &comms->_sim_records[comms->_sim_record_count];
-          record->address = address;
-          record->reg = reg;
-          comms->_sim_record_count++;
+          result = sim_seek_frame_reg(device, reg);
+          if (result == COMMS_RESULT_OK) {
+            if (fwrite(data, 1U, size, device->file) != size) {
+              result = COMMS_RESULT_ERROR_WRITE_FAILED;
+            }
+          }
         }
-      }
-      if (record != NULL) {
-        record->len = (uint8_t)size;
-        (void)memcpy(record->data, data, size);
-        comms->_sim_dirty_addrs[address] = true;
       }
     }
   }

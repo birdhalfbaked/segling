@@ -45,7 +45,8 @@ comms_result_t comms_read_i2c(comms_t *comms, uint8_t address, uint8_t reg,
   struct i2c_msg msgs[2];
   struct i2c_rdwr_ioctl_data msgset;
 
-  if ((comms == NULL) || (data == NULL) || (size == 0U) || !comms->_initialized ||
+  if ((comms == NULL) || (data == NULL) || (size == 0U) ||
+      (size > COMMS_BUFFER_SIZE) || !comms->_initialized ||
       (comms->_i2c_fd < 0)) {
     result = COMMS_RESULT_ERROR_READ_FAILED;
   } else {
@@ -74,10 +75,10 @@ comms_result_t comms_write_i2c(comms_t *comms, uint8_t address, uint8_t reg,
   comms_result_t result = COMMS_RESULT_OK;
   struct i2c_msg msgs[1];
   struct i2c_rdwr_ioctl_data msgset;
-  uint8_t buf[1U + COMMS_SIM_MAX_DATA_LEN];
+  uint8_t buf[1U + COMMS_BUFFER_SIZE];
 
   if ((comms == NULL) || (data == NULL) || (size == 0U) ||
-      (size > COMMS_SIM_MAX_DATA_LEN) || !comms->_initialized ||
+      (size > COMMS_BUFFER_SIZE) || !comms->_initialized ||
       (comms->_i2c_fd < 0)) {
     result = COMMS_RESULT_ERROR_WRITE_FAILED;
   } else {

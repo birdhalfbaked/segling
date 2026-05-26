@@ -218,8 +218,8 @@ These are the rules the core expects; violating them shows up as missed slots, s
 One `Makefile` at the repo root of `controller/` (shared flags for app and tests). Artifacts go under `build/`.
 
 ```bash
-make generate-sim-data                          # simulated_data/imu.dat, mag.dat
-make generate-sim-data SIM_SEED=99              # different fixture, same layout
+make generate-sim-data                          # 10 binary frames per device (default)
+make generate-sim-data SIM_SEED=99 SIM_FRAMES=20
 
 make                                          # build/segling-controller
 make test                                     # build/run_tests
@@ -246,28 +246,20 @@ On first I2C access to an address, `comms_sim.c` loads the matching file from `C
 
 Add a `case` in `comms_sim.c` and a generator function in `scripts/generate_sim_data.py` for each new sensor.
 
-Per-file line format (`reg` then data bytes; address comes from the switch):
-
-```text
-# comments allowed
-3B 00 10 20 00 30 40 00 50 60 00 00 00 00
-```
-
-Regenerate all device files with one seeded script:
+Per-file format: **raw binary**, `frame_count × frame_len` bytes with no separators. Frame width is fixed per device (`imu.dat`: 14 bytes; `mag.dat`: 6 bytes). Load uses `fseek` to each `line_index × frame_len`; each successful read advances the index. After the last frame, further reads fail as a **disconnected device**.
 
 ```bash
-make generate-sim-data SIM_SEED=42
-# or: uv run python scripts/generate_sim_data.py --seed 42 --out-dir simulated_data
+make generate-sim-data SIM_SEED=42 SIM_FRAMES=10
+# or: uv run python scripts/generate_sim_data.py --seed 42 --frames 10 --out-dir simulated_data
 ```
 
-Writes are flushed back to the same per-device file on `comms_deinit`.
+Writes seek into the same contiguous binary layout in place (`rb+`); `comms_deinit` closes open files.
 
 ## Layout
 
 | Path | Purpose |
 |------|---------|
 | `include/controller/` | Core: controller, comms, storage, scheduling, logging |
-| `data/comms_sim.txt` | Example sim register file |
 | `include/integrations/` | Per-device modules (AHRS, GPS, …) |
 | `src/` | Implementations |
 | `cmd/main.c` | Process entry: init → step loop |

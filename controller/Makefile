@@ -6,10 +6,13 @@ LDFLAGS :=
 
 COMMS_BACKEND ?= SIM
 BUILD_DIR := build
+COMMS_BUFFER_SIZE ?= 128
 COMMS_SIM_DATA_DIR ?= simulated_data
 SIM_SEED ?= 42
+SIM_FRAMES ?= 10
 
 # --- shared backend config (app + tests use the same CPPFLAGS) ---
+CPPFLAGS += -DCOMMS_BUFFER_SIZE=$(COMMS_BUFFER_SIZE)
 ifeq ($(COMMS_BACKEND),HARDWARE)
   CPPFLAGS += -DCOMMS_BACKEND=COMMS_BACKEND_HARDWARE
   I2C_DEVICE ?= /dev/i2c-1
@@ -42,7 +45,7 @@ check: $(TEST_BIN)
 	$(TEST_BIN)
 
 generate-sim-data:
-	uv run python scripts/generate_sim_data.py --seed $(SIM_SEED) --out-dir $(COMMS_SIM_DATA_DIR)
+	uv run python scripts/generate_sim_data.py --seed $(SIM_SEED) --frames $(SIM_FRAMES) --out-dir $(COMMS_SIM_DATA_DIR)
 
 $(BUILD_DIR)/%.o: %.c
 	@mkdir -p $(dir $@)
